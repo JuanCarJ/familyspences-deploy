@@ -3,6 +3,7 @@ WORKDIR /app
 COPY familyspencesapp/package*.json ./
 RUN npm ci
 COPY familyspencesapp/ .
+ENV BROWSERSLIST="last 1 Chrome version, last 1 Firefox version, last 2 Edge major versions, last 2 Safari major versions"
 RUN npm run build -- --configuration production
 
 FROM nginx:alpine
