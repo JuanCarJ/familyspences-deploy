@@ -1,0 +1,87 @@
+services:
+  # --- RabbitMQ ---
+  budget-rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: budget-rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - calenagent-infrastructure_cogni-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # --- API Backend (Spring Boot) ---
+  budget-api:
+    container_name: budget-api
+    build:
+      context: ..
+      dockerfile: familyspences-deploy/Dockerfile.api
+    restart: always
+    depends_on:
+      budget-rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: ${DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_RABBITMQ_HOST: budget-rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      JWT_SECRET: ${JWT_SECRET}
+    networks:
+      - calenagent-infrastructure_cogni-net
+
+  # --- Budget Processor (Spring Boot) ---
+  budget-processor:
+    container_name: budget-processor
+    build:
+      context: ..
+      dockerfile: familyspences-deploy/Dockerfile.processor
+    restart: always
+    depends_on:
+      budget-rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: ${DB_URL}
+      SPRING_DATASOURCE_USERNAME: ${DB_USERNAME}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_RABBITMQ_HOST: budget-rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      SPRING_RABBITMQ_USERNAME: ${RABBITMQ_USER:-guest}
+      SPRING_RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+      SERVER_PORT: 8082
+    networks:
+      - calenagent-infrastructure_cogni-net
+
+  # --- Frontend (Angular + Nginx) ---
+  budget-frontend:
+    container_name: budget-frontend
+    build:
+      context: ..
+      dockerfile: familyspences-deploy/Dockerfile.frontend
+    restart: always
+    depends_on:
+      - budget-api
+    networks:
+      - calenagent-infrastructure_cogni-net
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.budget.rule=Host(`budget.dautia.com`)"
+      - "traefik.http.routers.budget.entrypoints=websecure"
+      - "traefik.http.routers.budget.tls.certresolver=myresolver"
+      - "traefik.http.services.budget.loadbalancer.server.port=80"
+
+volumes:
+  rabbitmq_data:
+
+networks:
+  calenagent-infrastructure_cogni-net:
+    external: true

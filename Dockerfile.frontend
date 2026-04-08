@@ -1,0 +1,11 @@
+FROM node:18-alpine AS build
+WORKDIR /app
+COPY familyspencesapp/package*.json ./
+RUN npm ci
+COPY familyspencesapp/ .
+RUN npm run build -- --configuration production
+
+FROM nginx:alpine
+COPY --from=build /app/dist/familyspencesapp /usr/share/nginx/html
+COPY familyspences-deploy/nginx.conf /etc/nginx/conf.d/default.conf
+EXPOSE 80
